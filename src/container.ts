@@ -22,6 +22,9 @@ import {
   MOCK_PUSH_SERVICE,
   MOCK_SMS_GATEWAY,
   MUSIC_CACHE,
+  PREFERENCES_CACHE,
+  PREFERENCES_CACHE_FILE,
+  RAW_USER_PREFERENCES_SERVICE,
   MUSIC_PROVIDER_CHAIN,
   MUSIC_PROVIDER_NAME,
   MUSIC_PROVIDER_RATE_LIMIT,
@@ -30,6 +33,9 @@ import {
   SIMULATED_OUTAGES,
 } from "./di/infrastructureTokens.js";
 import {
+  DELAY,
+  NOTIFICATION_RETRY_DELAY_MS,
+  NOTIFICATION_ROUNDS,
   FALLBACK_TRACK_SOURCE,
   LOGGER,
   MUSIC_PROVIDER,
@@ -38,6 +44,7 @@ import {
   TRACK_SELECTION_POLICY,
   USER_PREFERENCES_SERVICE,
 } from "./di/tokens.js";
+import { JsonFileCache } from "./infrastructure/cache/JsonFileCache.js";
 import { InMemoryCache } from "./infrastructure/cache/InMemoryCache.js";
 import { FetchHttpClient } from "./infrastructure/http/FetchHttpClient.js";
 import { ConsoleLogger } from "./infrastructure/logging/ConsoleLogger.js";
@@ -46,6 +53,8 @@ import { FailoverMusicProvider } from "./infrastructure/music/FailoverMusicProvi
 import { LocalFallbackTrackSource } from "./infrastructure/music/LocalFallbackTrackSource.js";
 import { RateLimitedMusicProvider } from "./infrastructure/music/RateLimitedMusicProvider.js";
 import { InMemoryUserPreferencesService } from "./infrastructure/preferences/InMemoryUserPreferencesService.js";
+import { LastKnownUserPreferencesService } from "./infrastructure/preferences/LastKnownUserPreferencesService.js";
+import { TimerDelay } from "./infrastructure/time/TimerDelay.js";
 import { SystemClock } from "./infrastructure/time/SystemClock.js";
 import { ConsoleLineWriter } from "./vendors/ConsoleLineWriter.js";
 import { MockEmailClient } from "./vendors/MockEmailClient.js";
@@ -74,13 +83,16 @@ export function buildContainer(config: EnvConfig): DependencyContainer {
   container.registerInstance(HTTP_TIMEOUT_MS, config.httpTimeoutMs);
   container.registerInstance(CACHE_TTL_MS, config.musicCacheTtlMs);
   container.registerInstance(EMAIL_SENDER, config.emailSender);
-  container.registerInstance(SIMULATED_OUTAGES, config.simulatedChannelOutages);
+  container.registerInstance(SIMULATED_OUTAGES, config.simulatedOutages);
 
   container.registerSingleton(LOGGER, ConsoleLogger);
   container.registerSingleton(CLOCK, SystemClock);
   container.registerSingleton(HTTP_CLIENT, FetchHttpClient);
 
-  container.registerSingleton(USER_PREFERENCES_SERVICE, InMemoryUserPreferencesService);
+  container.registerInstance(PREFERENCES_CACHE_FILE, config.preferencesCacheFile);
+  container.registerSingleton(PREFERENCES_CACHE, JsonFileCache);
+  container.registerSingleton(RAW_USER_PREFERENCES_SERVICE, InMemoryUserPreferencesService);
+  container.registerSingleton(USER_PREFERENCES_SERVICE, LastKnownUserPreferencesService);
   container.registerSingleton(TRACK_SELECTION_POLICY, DayAndWeatherTrackSelectionPolicy);
 
   container.register(MUSIC_PROVIDER_CHAIN, {
@@ -98,6 +110,9 @@ export function buildContainer(config: EnvConfig): DependencyContainer {
       Object.fromEntries(notificationChannels.map((name) => [name, scope.resolve(notificationChannelAdapter(name))])),
     ),
   });
+  container.registerSingleton(DELAY, TimerDelay);
+  container.registerInstance(NOTIFICATION_ROUNDS, config.notificationRounds);
+  container.registerInstance(NOTIFICATION_RETRY_DELAY_MS, config.notificationRetryDelayMs);
   container.registerSingleton(NOTIFIER, FailoverNotifier);
 
   return container;

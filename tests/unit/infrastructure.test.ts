@@ -88,7 +88,7 @@ describe("FetchHttpClient", () => {
 });
 
 describe("InMemoryUserPreferencesService", () => {
-  const service = new InMemoryUserPreferencesService();
+  const service = new InMemoryUserPreferencesService([]);
 
   it("retourne null pour un utilisateur inconnu", async () => {
     await expect(service.getPreferences("inconnu")).resolves.toBeNull();

@@ -17,8 +17,11 @@ describe("loadEnvConfig", () => {
       musicProviders: ["itunes", "musicbrainz"],
       musicCacheTtlMs: 86_400_000,
       notificationChannels: ["email", "sms", "push"],
+      notificationRounds: 3,
+      notificationRetryDelayMs: 2000,
+      preferencesCacheFile: ".reveil-musical/preferences.json",
       emailSender: ENV_DEFAULTS.EMAIL_SENDER,
-      simulatedChannelOutages: [],
+      simulatedOutages: [],
     });
   });
 
@@ -29,8 +32,11 @@ describe("loadEnvConfig", () => {
       MUSIC_PROVIDERS: " MusicBrainz , itunes,",
       MUSIC_CACHE_TTL_SECONDS: "60",
       NOTIFICATION_CHANNELS: "push",
+      NOTIFICATION_ROUNDS: "5",
+      NOTIFICATION_RETRY_DELAY_MS: "100",
+      PREFERENCES_CACHE_FILE: "/tmp/preferences.json",
       EMAIL_SENDER: "bonjour@example.org",
-      SIMULATED_CHANNEL_OUTAGES: "sms, email",
+      SIMULATED_OUTAGES: "sms, email",
     });
 
     expect(config).toEqual({
@@ -39,8 +45,11 @@ describe("loadEnvConfig", () => {
       musicProviders: ["musicbrainz", "itunes"],
       musicCacheTtlMs: 60_000,
       notificationChannels: ["push"],
+      notificationRounds: 5,
+      notificationRetryDelayMs: 100,
+      preferencesCacheFile: "/tmp/preferences.json",
       emailSender: "bonjour@example.org",
-      simulatedChannelOutages: ["sms", "email"],
+      simulatedOutages: ["sms", "email"],
     });
   });
 
@@ -50,6 +59,11 @@ describe("loadEnvConfig", () => {
 
   it.each(["abc", "0", "-5", "1.5", ""])("rejette un délai HTTP invalide (%j)", (value) => {
     expect(() => loadEnvConfig({ HTTP_TIMEOUT_MS: value })).toThrow("HTTP_TIMEOUT_MS");
+  });
+
+  it("rejette un nombre de tours ou une pause invalide", () => {
+    expect(() => loadEnvConfig({ NOTIFICATION_ROUNDS: "0" })).toThrow("NOTIFICATION_ROUNDS");
+    expect(() => loadEnvConfig({ NOTIFICATION_RETRY_DELAY_MS: "vite" })).toThrow("NOTIFICATION_RETRY_DELAY_MS");
   });
 
   it("rejette une durée de cache invalide", () => {

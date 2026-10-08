@@ -1,4 +1,5 @@
 import type { InjectionToken } from "tsyringe";
+import type { Delay } from "../application/ports/Delay.js";
 import type { FallbackTrackSource } from "../application/ports/FallbackTrackSource.js";
 import type { Logger } from "../application/ports/Logger.js";
 import type { MusicProvider } from "../application/ports/MusicProvider.js";
@@ -15,3 +16,6 @@ export const NOTIFIER: InjectionToken<Notifier> = Symbol("Notifier");
 export const NOTIFICATION_CHANNELS: InjectionToken<Readonly<Record<string, NotificationChannel>>> =
   Symbol("NotificationChannels");
 export const LOGGER: InjectionToken<Logger> = Symbol("Logger");
+export const DELAY: InjectionToken<Delay> = Symbol("Delay");
+export const NOTIFICATION_ROUNDS: InjectionToken<number> = Symbol("NotificationRounds");
+export const NOTIFICATION_RETRY_DELAY_MS: InjectionToken<number> = Symbol("NotificationRetryDelayMs");

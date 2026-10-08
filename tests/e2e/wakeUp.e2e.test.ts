@@ -2,27 +2,33 @@ import { describe, expect, it } from "vitest";
 import { WakeUpService } from "../../src/application/WakeUpService.js";
 import { loadEnvConfig } from "../../src/config/env.js";
 import { buildContainer } from "../../src/container.js";
-import { HTTP_CLIENT, MOCK_OUTPUT } from "../../src/di/infrastructureTokens.js";
-import { LOGGER, MUSIC_PROVIDER } from "../../src/di/tokens.js";
+import { HTTP_CLIENT, MOCK_OUTPUT, PREFERENCES_CACHE } from "../../src/di/infrastructureTokens.js";
+import { DELAY, LOGGER, MUSIC_PROVIDER } from "../../src/di/tokens.js";
 import { NotificationFailedError } from "../../src/domain/errors.js";
+import type { UserPreferences } from "../../src/domain/types.js";
+import { FakeCache } from "../fakes/FakeCache.js";
+import { FakeDelay } from "../fakes/FakeDelay.js";
 import { FakeHttpClient } from "../fakes/FakeHttpClient.js";
 import { FakeLineWriter } from "../fakes/FakeLineWriter.js";
 import { FakeLogger } from "../fakes/FakeLogger.js";
 import { ITUNES_FOUND, ITUNES_NOT_FOUND, MUSICBRAINZ_FOUND } from "../fakes/fixtures.js";
 
-function setup(env: NodeJS.ProcessEnv = {}) {
+function setup(env: NodeJS.ProcessEnv = {}, preferencesCache = new FakeCache<UserPreferences>()) {
   const httpClient = new FakeHttpClient()
     .route("itunes.apple.com", ITUNES_FOUND)
     .route("musicbrainz.org", MUSICBRAINZ_FOUND);
   const output = new FakeLineWriter();
   const logger = new FakeLogger();
+  const delay = new FakeDelay();
 
   const container = buildContainer(loadEnvConfig(env));
   container.registerInstance(HTTP_CLIENT, httpClient);
   container.registerInstance(MOCK_OUTPUT, output);
   container.registerInstance(LOGGER, logger);
+  container.registerInstance(DELAY, delay);
+  container.registerInstance(PREFERENCES_CACHE, preferencesCache);
 
-  return { wakeUpService: container.resolve(WakeUpService), container, httpClient, output, logger };
+  return { wakeUpService: container.resolve(WakeUpService), container, httpClient, output, logger, delay };
 }
 
 describe("Réveil musical de bout en bout (conteneur réel, frontières externes simulées)", () => {
@@ -102,7 +108,7 @@ describe("Réveil musical de bout en bout (conteneur réel, frontières externes
   });
 
   it("canal préféré en panne -> réveil envoyé sur un autre canal de l'utilisateur", async () => {
-    const { wakeUpService, output } = setup({ SIMULATED_CHANNEL_OUTAGES: "sms" });
+    const { wakeUpService, output } = setup({ SIMULATED_OUTAGES: "sms" });
 
     const result = await wakeUpService.wakeUp({ userId: "u-002", day: "LUNDI", weather: "PLUIE" });
 
@@ -113,7 +119,7 @@ describe("Réveil musical de bout en bout (conteneur réel, frontières externes
   });
 
   it("fournisseurs et canal préféré en panne en même temps -> réveil quand même envoyé", async () => {
-    const { wakeUpService, httpClient, output } = setup({ SIMULATED_CHANNEL_OUTAGES: "push" });
+    const { wakeUpService, httpClient, output } = setup({ SIMULATED_OUTAGES: "push" });
     httpClient.route("itunes", new Error("503")).route("musicbrainz", new Error("503"));
 
     const result = await wakeUpService.wakeUp({ userId: "u-003", day: "DIMANCHE", weather: "SOLEIL" });
@@ -124,12 +130,26 @@ describe("Réveil musical de bout en bout (conteneur réel, frontières externes
     expect(output.lines).toHaveLength(1);
   });
 
-  it("tous les canaux en panne -> NotificationFailedError, signalée à l'appelant", async () => {
-    const { wakeUpService } = setup({ SIMULATED_CHANNEL_OUTAGES: "email,sms,push" });
+  it("service de préférences en panne -> réveil envoyé avec les dernières préférences connues", async () => {
+    const preferencesCache = new FakeCache<UserPreferences>();
+    await setup({}, preferencesCache).wakeUpService.wakeUp({ userId: "u-001", day: "MARDI", weather: "PLUIE" });
+
+    const { wakeUpService, output, logger } = setup({ SIMULATED_OUTAGES: "preferences" }, preferencesCache);
+    const result = await wakeUpService.wakeUp({ userId: "u-001", day: "MARDI", weather: "PLUIE" });
+
+    expect(result.channel).toBe("email");
+    expect(output.lines).toHaveLength(1);
+    expect(output.lines[0]).toContain("alice@example.org");
+    expect(logger.warnings).toHaveLength(1);
+  });
+
+  it("tous les canaux en panne -> plusieurs tours d'essai, puis NotificationFailedError signalée à l'appelant", async () => {
+    const { wakeUpService, delay } = setup({ SIMULATED_OUTAGES: "email,sms,push" });
 
     await expect(wakeUpService.wakeUp({ userId: "u-001", day: "MARDI", weather: "PLUIE" })).rejects.toBeInstanceOf(
       NotificationFailedError,
     );
+    expect(delay.waits).toEqual([2000, 2000]);
   });
 
   it("deux réveils pour le même morceau -> un seul appel au fournisseur (cache)", async () => {

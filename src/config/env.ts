@@ -4,8 +4,11 @@ export interface EnvConfig {
   musicProviders: string[];
   musicCacheTtlMs: number;
   notificationChannels: string[];
+  notificationRounds: number;
+  notificationRetryDelayMs: number;
+  preferencesCacheFile: string;
   emailSender: string;
-  simulatedChannelOutages: string[];
+  simulatedOutages: string[];
 }
 
 export const ENV_DEFAULTS = {
@@ -14,8 +17,11 @@ export const ENV_DEFAULTS = {
   MUSIC_PROVIDERS: "itunes,musicbrainz",
   MUSIC_CACHE_TTL_SECONDS: "86400",
   NOTIFICATION_CHANNELS: "email,sms,push",
+  NOTIFICATION_ROUNDS: "3",
+  NOTIFICATION_RETRY_DELAY_MS: "2000",
+  PREFERENCES_CACHE_FILE: ".reveil-musical/preferences.json",
   EMAIL_SENDER: "reveil@reveil-musical.example",
-  SIMULATED_CHANNEL_OUTAGES: "",
+  SIMULATED_OUTAGES: "",
 } as const;
 
 function parseList(value: string): string[] {
@@ -42,7 +48,13 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
       parsePositiveInteger("MUSIC_CACHE_TTL_SECONDS", env.MUSIC_CACHE_TTL_SECONDS ?? ENV_DEFAULTS.MUSIC_CACHE_TTL_SECONDS) *
       1000,
     notificationChannels: parseList(env.NOTIFICATION_CHANNELS ?? ENV_DEFAULTS.NOTIFICATION_CHANNELS),
+    notificationRounds: parsePositiveInteger("NOTIFICATION_ROUNDS", env.NOTIFICATION_ROUNDS ?? ENV_DEFAULTS.NOTIFICATION_ROUNDS),
+    notificationRetryDelayMs: parsePositiveInteger(
+      "NOTIFICATION_RETRY_DELAY_MS",
+      env.NOTIFICATION_RETRY_DELAY_MS ?? ENV_DEFAULTS.NOTIFICATION_RETRY_DELAY_MS,
+    ),
+    preferencesCacheFile: env.PREFERENCES_CACHE_FILE ?? ENV_DEFAULTS.PREFERENCES_CACHE_FILE,
     emailSender: env.EMAIL_SENDER ?? ENV_DEFAULTS.EMAIL_SENDER,
-    simulatedChannelOutages: parseList(env.SIMULATED_CHANNEL_OUTAGES ?? ENV_DEFAULTS.SIMULATED_CHANNEL_OUTAGES),
+    simulatedOutages: parseList(env.SIMULATED_OUTAGES ?? ENV_DEFAULTS.SIMULATED_OUTAGES),
   };
 }

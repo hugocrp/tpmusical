@@ -22,11 +22,15 @@ npm run wake -- u-001 LUNDI PLUIE
 Démonstration des modes dégradés, sans toucher au code :
 
 ```bash
-SIMULATED_CHANNEL_OUTAGES=sms npm run wake -- u-002 MARDI PLUIE
+SIMULATED_OUTAGES=sms npm run wake -- u-002 MARDI PLUIE
 ```
 
 ```bash
 MUSIC_PROVIDERS= npm run wake -- u-002 MARDI NEIGE
+```
+
+```bash
+SIMULATED_OUTAGES=preferences npm run wake -- u-001 MARDI PLUIE
 ```
 
 ```bash
@@ -53,12 +57,12 @@ src/
     ports/           Les abstractions dont le métier a besoin (interfaces).
     WakeUpService.ts            Cas d'usage : préférences -> morceau -> message -> notification
     DayAndWeatherTrackSelectionPolicy.ts   Strategy : quel morceau pour ce jour et cette météo
-    FailoverNotifier.ts         Règle métier : canal préféré, puis les autres canaux de l'utilisateur
+    FailoverNotifier.ts         Règle métier : canal préféré, puis les autres canaux, plusieurs tours si tout échoue
     wakeUpMessage.ts            Rédaction du message
   infrastructure/    Les adaptateurs : tout ce qui connaît un détail technique.
     music/           iTunes, MusicBrainz, + décorateurs (cache, quota), bascule, secours local
     notification/    Adaptateurs email / SMS / push
-    preferences/     Mock du service interne de préférences
+    preferences/     Mock du service interne de préférences + repli sur les dernières préférences connues
     http/ cache/ time/ logging/   fetch, cache mémoire avec durée de vie, horloge, console
   vendors/           Mocks des SDK tiers de notification (interfaces volontairement différentes)
   config/            env.ts : seul lecteur de process.env. providers.ts : registres nom -> classe
@@ -133,9 +137,13 @@ morceau demandé
        CachingMusicProvider ─ RateLimitedMusicProvider ─ adaptateur (iTunes, MusicBrainz)
   └─ rien trouvé ou tout en panne ─> LocalFallbackTrackSource (liste codée en dur)
 
+préférences
+  └─ LastKnownUserPreferencesService ── service interne, sinon dernières
+                                        préférences connues (fichier)
+
 notification
   └─ FailoverNotifier ── canal préféré, puis les autres canaux pour lesquels
-                         l'utilisateur a une adresse
+                         l'utilisateur a une adresse ; plusieurs tours si tout échoue
 ```
 
 | Panne | Comportement |
@@ -146,16 +154,26 @@ notification
 | Fournisseur en panne mais morceau déjà demandé | Servi depuis le cache (24 h par défaut). Les pannes ne sont jamais mises en cache |
 | Tous les fournisseurs en panne ou morceau introuvable | Morceau de la liste locale : celui demandé s'il y figure, sinon un morceau par défaut |
 | Canal préféré en panne, non installé ou sans adresse | Envoi sur un autre canal de l'utilisateur |
+| Tous les canaux de l'utilisateur en panne | Nouveaux tours d'essai sur tous ses canaux après une pause (3 tours, 2 s de pause par défaut) |
+| Service de préférences en panne | Dernières préférences connues de l'utilisateur, mémorisées à chaque réveil réussi |
 
 Le résultat de l'appel indique toujours ce qui s'est passé (`trackSource`,
 `channel`, `degraded`, `incidents`), et chaque incident est journalisé.
 
-**Limites assumées.** Si *tous* les canaux de l'utilisateur échouent, l'appel
-lève `NotificationFailedError` (code de sortie 1) avec le détail de chaque
-tentative : c'est à l'ordonnanceur de relancer et d'alerter. De même, une panne
-du service interne de préférences fait échouer l'appel, puisque sans lui ni le
-canal ni l'adresse ne sont connus. Le cache et les quotas sont en mémoire : ils
-ne valent que pour un processus qui reste en vie entre deux réveils.
+**Ce qui reste impossible.** Deux situations ne peuvent pas être résolues par
+le code, et se terminent par un code de sortie 1 avec le détail de chaque
+tentative, pour que l'ordonnanceur relance et alerte :
+
+- tous les canaux de l'utilisateur sont encore en panne après le dernier tour
+  d'essai ;
+- le service de préférences est en panne pour un utilisateur qui n'a jamais été
+  réveillé (aucune préférence connue, donc ni canal ni adresse).
+
+Le cache des morceaux et les quotas sont en mémoire : ils ne valent que pour un
+processus qui reste en vie entre deux réveils. Les dernières préférences
+connues, elles, sont dans un fichier (`PREFERENCES_CACHE_FILE`) et survivent
+d'un lancement à l'autre ; ce fichier contient les adresses des utilisateurs et
+n'est pas versionné.
 
 ## Choix d'interprétation
 
@@ -183,11 +201,14 @@ pas de dépendance `dotenv`) ; [`.env.example`](.env.example) sert de modèle.
 |---|---|---|
 | `MUSIC_PROVIDERS` | `itunes,musicbrainz` | Fournisseurs actifs, par ordre de priorité. Vide = secours local seul |
 | `NOTIFICATION_CHANNELS` | `email,sms,push` | Canaux installés |
+| `NOTIFICATION_ROUNDS` | `3` | Nombre de tours d'essai sur les canaux de l'utilisateur |
+| `NOTIFICATION_RETRY_DELAY_MS` | `2000` | Pause entre deux tours |
+| `PREFERENCES_CACHE_FILE` | `.reveil-musical/preferences.json` | Fichier des dernières préférences connues |
 | `HTTP_USER_AGENT` | voir `env.ts` | En-tête exigé par MusicBrainz (nom d'application + contact) |
 | `HTTP_TIMEOUT_MS` | `3000` | Délai maximal d'un appel à un fournisseur |
 | `MUSIC_CACHE_TTL_SECONDS` | `86400` | Durée de vie d'une réponse en cache |
 | `EMAIL_SENDER` | `reveil@reveil-musical.example` | Expéditeur des emails |
-| `SIMULATED_CHANNEL_OUTAGES` | *(vide)* | Canaux simulés en panne, pour la démonstration |
+| `SIMULATED_OUTAGES` | *(vide)* | Pannes simulées pour la démonstration : `email`, `sms`, `push`, `preferences` |
 
 Une valeur inconnue (`MUSIC_PROVIDERS=spotify`) arrête le programme au
 démarrage avec la liste des valeurs acceptées.
@@ -202,7 +223,7 @@ npm test
 npm run test:coverage
 ```
 
-190 tests, aucun n'utilise le réseau. Couverture de `src/` : **100 %** des
+209 tests, aucun n'utilise le réseau. Couverture de `src/` : **100 %** des
 instructions, branches, fonctions et lignes (seuil de 90 % imposé par
 `vitest.config.ts` ; `main.ts` et les interfaces sont exclus du calcul).
 

@@ -3,7 +3,8 @@ import type { Cache } from "../application/ports/Cache.js";
 import type { Clock } from "../application/ports/Clock.js";
 import type { HttpClient } from "../application/ports/HttpClient.js";
 import type { MusicProvider } from "../application/ports/MusicProvider.js";
-import type { Track } from "../domain/types.js";
+import type { UserPreferencesService } from "../application/ports/UserPreferencesService.js";
+import type { Track, UserPreferences } from "../domain/types.js";
 import type { LineWriter } from "../vendors/LineWriter.js";
 import type { MockEmailClient } from "../vendors/MockEmailClient.js";
 import type { MockPushService } from "../vendors/MockPushService.js";
@@ -28,3 +29,7 @@ export const MOCK_PUSH_SERVICE: InjectionToken<MockPushService> = Symbol("MockPu
 export const MOCK_OUTPUT: InjectionToken<LineWriter> = Symbol("MockOutput");
 export const SIMULATED_OUTAGES: InjectionToken<readonly string[]> = Symbol("SimulatedOutages");
 export const EMAIL_SENDER: InjectionToken<string> = Symbol("EmailSender");
+
+export const RAW_USER_PREFERENCES_SERVICE: InjectionToken<UserPreferencesService> = Symbol("RawUserPreferencesService");
+export const PREFERENCES_CACHE: InjectionToken<Cache<string, UserPreferences>> = Symbol("PreferencesCache");
+export const PREFERENCES_CACHE_FILE: InjectionToken<string> = Symbol("PreferencesCacheFile");

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FailoverNotifier } from "../../src/application/FailoverNotifier.js";
 import { ChannelUnavailableError, NotificationFailedError } from "../../src/domain/errors.js";
 import type { UserPreferences, WakeUpMessage } from "../../src/domain/types.js";
+import { FakeDelay } from "../fakes/FakeDelay.js";
 import { FakeLogger } from "../fakes/FakeLogger.js";
 import { FakeNotificationChannel } from "../fakes/FakeNotificationChannel.js";
 import { ALICE } from "../fakes/fixtures.js";
@@ -12,7 +13,7 @@ describe("FailoverNotifier", () => {
   it("envoie sur le canal préféré, à l'adresse de l'utilisateur pour ce canal", async () => {
     const email = new FakeNotificationChannel();
     const sms = new FakeNotificationChannel();
-    const notifier = new FailoverNotifier({ email, sms }, new FakeLogger());
+    const notifier = new FailoverNotifier({ email, sms }, new FakeLogger(), new FakeDelay(), 1, 0);
 
     const delivery = await notifier.notify(ALICE, MESSAGE);
 
@@ -25,7 +26,7 @@ describe("FailoverNotifier", () => {
     const email = new FakeNotificationChannel(new ChannelUnavailableError("email", "panne"));
     const sms = new FakeNotificationChannel();
     const logger = new FakeLogger();
-    const notifier = new FailoverNotifier({ email, sms }, logger);
+    const notifier = new FailoverNotifier({ email, sms }, logger, new FakeDelay(), 1, 0);
 
     const delivery = await notifier.notify(ALICE, MESSAGE);
 
@@ -37,7 +38,7 @@ describe("FailoverNotifier", () => {
 
   it("canal préféré non installé -> bascule sur un autre canal", async () => {
     const sms = new FakeNotificationChannel();
-    const notifier = new FailoverNotifier({ sms }, new FakeLogger());
+    const notifier = new FailoverNotifier({ sms }, new FakeLogger(), new FakeDelay(), 1, 0);
 
     const delivery = await notifier.notify(ALICE, MESSAGE);
 
@@ -49,7 +50,7 @@ describe("FailoverNotifier", () => {
     const push = new FakeNotificationChannel();
     const email = new FakeNotificationChannel();
     const preferences: UserPreferences = { ...ALICE, preferredChannel: "push" };
-    const notifier = new FailoverNotifier({ push, email }, new FakeLogger());
+    const notifier = new FailoverNotifier({ push, email }, new FakeLogger(), new FakeDelay(), 1, 0);
 
     const delivery = await notifier.notify(preferences, MESSAGE);
 
@@ -61,7 +62,7 @@ describe("FailoverNotifier", () => {
   it("ne confond pas un nom de canal avec une propriété héritée d'Object", async () => {
     const email = new FakeNotificationChannel();
     const preferences: UserPreferences = { ...ALICE, preferredChannel: "constructor" };
-    const notifier = new FailoverNotifier({ email }, new FakeLogger());
+    const notifier = new FailoverNotifier({ email }, new FakeLogger(), new FakeDelay(), 1, 0);
 
     const delivery = await notifier.notify(preferences, MESSAGE);
 
@@ -71,7 +72,7 @@ describe("FailoverNotifier", () => {
   it("erreur non standard d'un canal -> traitée comme une panne", async () => {
     const email = { send: () => Promise.reject("boom") };
     const sms = new FakeNotificationChannel();
-    const notifier = new FailoverNotifier({ email, sms }, new FakeLogger());
+    const notifier = new FailoverNotifier({ email, sms }, new FakeLogger(), new FakeDelay(), 1, 0);
 
     const delivery = await notifier.notify(ALICE, MESSAGE);
 
@@ -81,7 +82,7 @@ describe("FailoverNotifier", () => {
   it("tous les canaux en panne -> NotificationFailedError détaillant chaque tentative", async () => {
     const email = new FakeNotificationChannel(new ChannelUnavailableError("email", "panne"));
     const sms = new FakeNotificationChannel(new ChannelUnavailableError("sms", "panne"));
-    const notifier = new FailoverNotifier({ email, sms }, new FakeLogger());
+    const notifier = new FailoverNotifier({ email, sms }, new FakeLogger(), new FakeDelay(), 1, 0);
 
     const failure = await notifier.notify(ALICE, MESSAGE).catch((error: unknown) => error);
 

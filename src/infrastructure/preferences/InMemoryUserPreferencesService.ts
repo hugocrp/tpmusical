@@ -1,6 +1,7 @@
-import { injectable } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import type { UserPreferencesService } from "../../application/ports/UserPreferencesService.js";
 import type { UserPreferences } from "../../domain/types.js";
+import { SIMULATED_OUTAGES } from "../../di/infrastructureTokens.js";
 
 const USERS: readonly UserPreferences[] = [
   {
@@ -40,7 +41,12 @@ const USERS: readonly UserPreferences[] = [
 
 @injectable()
 export class InMemoryUserPreferencesService implements UserPreferencesService {
+  constructor(@inject(SIMULATED_OUTAGES) private readonly outages: readonly string[]) {}
+
   async getPreferences(userId: string): Promise<UserPreferences | null> {
+    if (this.outages.includes("preferences")) {
+      throw new Error("Service de préférences indisponible");
+    }
     return USERS.find((user) => user.userId === userId) ?? null;
   }
 }
