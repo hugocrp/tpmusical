@@ -1,0 +1,26 @@
+{
+  "allowed": {
+    "always": ["MIT", "ISC", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "0BSD"],
+    "developmentOnly": {
+      "MPL-2.0": "licenses/decisions.md"
+    }
+  },
+  "families": {
+    "permissive": [
+      "MIT",
+      "MIT-0",
+      "ISC",
+      "Apache-2.0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "0BSD",
+      "Unlicense",
+      "CC0-1.0",
+      "BlueOak-1.0.0",
+      "Zlib",
+      "Python-2.0"
+    ],
+    "copyleft": ["GPL-*", "AGPL-*", "LGPL-*", "MPL-*", "EPL-*", "EUPL-*", "CDDL-*", "OSL-*", "CC-BY-SA-*", "SSPL-*"],
+    "proprietary": ["UNLICENSED", "SEE LICENSE IN *", "Proprietary", "Commercial"]
+  }
+}

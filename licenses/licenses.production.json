@@ -1,0 +1,22 @@
+{
+  "reflect-metadata@0.2.2": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/rbuckton/reflect-metadata",
+    "publisher": "Ron Buckton",
+    "email": "ron.buckton@microsoft.com",
+    "url": "http://github.com/rbuckton",
+    "licenseFile": "node_modules/reflect-metadata/LICENSE"
+  },
+  "tslib@1.14.1": {
+    "licenses": "0BSD",
+    "repository": "https://github.com/Microsoft/tslib",
+    "publisher": "Microsoft Corp.",
+    "licenseFile": "node_modules/tslib/LICENSE.txt"
+  },
+  "tsyringe@4.10.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/Microsoft/tsyringe",
+    "publisher": "Steven Hobson-Campbell",
+    "licenseFile": "node_modules/tsyringe/LICENSE"
+  }
+}

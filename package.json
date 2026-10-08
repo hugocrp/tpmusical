@@ -1,0 +1,36 @@
+{
+  "name": "reveil-musical",
+  "version": "1.0.0",
+  "description": "Réveil musical : un morceau choisi selon le jour et la météo, notifié sur le canal préféré de l'utilisateur",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "wake": "tsx --env-file-if-exists=.env src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/main.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit && tsc --noEmit -p tools/tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
+    "licenses:scan": "tsx tools/licenses/scan.ts",
+    "licenses:audit": "tsx tools/licenses/cli.ts",
+    "licenses": "npm run licenses:scan && npm run licenses:audit",
+    "sbom": "npm sbom --sbom-format cyclonedx > licenses/sbom.cyclonedx.json"
+  },
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@vitest/coverage-v8": "^5.0.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
