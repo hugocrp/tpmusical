@@ -4,11 +4,12 @@ Audit du 2026-10-08. Le scan complet est dans [`licenses.json`](licenses.json), 
 
 ## Conclusion
 
-**Aucun composant bloquant.** Sur les 58 paquets analysés (3 en production), il n'y a aucune licence GPL, AGPL ou LGPL, aucune licence propriétaire et aucune licence non identifiée. Trois points demandent une justification, détaillée dans les fiches ci-dessous :
+**Aucun composant bloquant.** Sur les 157 paquets analysés (69 en production), il n'y a aucune licence GPL, AGPL ou LGPL, aucune licence propriétaire et aucune licence non identifiée. Quatre points demandent une justification, détaillée dans les fiches ci-dessous :
 
 1. `lightningcss` (MPL-2.0, copyleft faible), présent uniquement en développement ;
 2. `tslib@1.14.1`, dépendance transitive de production en retard d'une version majeure ;
-3. `tsyringe` et `reflect-metadata`, dont la dernière version stable est ancienne.
+3. `tsyringe` et `reflect-metadata`, dont la dernière version stable est ancienne ;
+4. `express`, qui amène à lui seul 65 paquets transitifs en production.
 
 ## Politique retenue
 
@@ -68,6 +69,23 @@ Les deux paquets sont à jour ; la question posée est celle de la pérennité (
 - changer de conteneur revient donc à retirer ces décorateurs et réécrire un fichier de câblage.
 
 **À réexaminer si :** `tsyringe` est archivé, ou si une version de TypeScript retire `experimentalDecorators`.
+
+## Fiche 4 : `express@5.2.1`
+
+| | |
+|---|---|
+| Licence | MIT |
+| Position dans l'arbre | Directe, production. Amène 65 paquets transitifs (`body-parser`, `router`, `qs`, `send`…) |
+| Licences de la chaîne | MIT, ISC et BSD-3-Clause uniquement : toutes sur la liste blanche |
+| Fraîcheur | Installée = dernière stable (2025-12-01) |
+| Décision | **Accepté** |
+| Stratégie | **Isoler** |
+
+L'ajout d'Express fait passer la production de 3 à 69 paquets : c'est le prix d'un serveur HTTP maintenu (lecture du corps JSON avec limite de taille, routage, gestion des erreurs) plutôt qu'écrit à la main. Le risque est celui de la chaîne transitive, que personne ne lit paquet par paquet : il est couvert par l'audit automatique des licences et par `npm audit` à chaque build (0 violation, 0 vulnérabilité à ce jour), et par le SBOM qui permet de répondre vite à « ai-je ce paquet ? » en cas de faille.
+
+Express n'est importé que par [`src/app.ts`](../src/app.ts) et [`src/controllers/wakeUpController.ts`](../src/controllers/wakeUpController.ts). Le métier (`WakeUpService`) ne le connaît pas : changer de framework HTTP revient à réécrire ces deux fichiers.
+
+**À réexaminer si :** `npm audit` signale un paquet de la chaîne, ou si une licence de la chaîne change.
 
 ## Constats sans décision
 

@@ -1,4 +1,5 @@
 export interface EnvConfig {
+  port: number;
   httpUserAgent: string;
   httpTimeoutMs: number;
   musicProviders: string[];
@@ -12,6 +13,7 @@ export interface EnvConfig {
 }
 
 export const ENV_DEFAULTS = {
+  PORT: "3000",
   HTTP_USER_AGENT: "ReveilMusical/1.0 (hugo.crepin@etu.mines-ales.fr)",
   HTTP_TIMEOUT_MS: "3000",
   MUSIC_PROVIDERS: "itunes,musicbrainz",
@@ -41,6 +43,7 @@ function parsePositiveInteger(name: string, value: string): number {
 
 export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   return {
+    port: parsePositiveInteger("PORT", env.PORT ?? ENV_DEFAULTS.PORT),
     httpUserAgent: env.HTTP_USER_AGENT ?? ENV_DEFAULTS.HTTP_USER_AGENT,
     httpTimeoutMs: parsePositiveInteger("HTTP_TIMEOUT_MS", env.HTTP_TIMEOUT_MS ?? ENV_DEFAULTS.HTTP_TIMEOUT_MS),
     musicProviders: parseList(env.MUSIC_PROVIDERS ?? ENV_DEFAULTS.MUSIC_PROVIDERS),

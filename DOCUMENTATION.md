@@ -1,7 +1,8 @@
 # Réveil musical - documentation technique
 
-Le TP porte sur **l'appel qui déclenche l'envoi** : il reçoit l'identifiant de
-l'utilisateur, le jour de la semaine et la météo du jour. L'ordonnancement et
+Le TP porte sur **l'appel qui déclenche l'envoi**, exposé ici comme une API
+HTTP : `POST /wakeup` reçoit l'identifiant de l'utilisateur, le jour de la
+semaine et la météo du jour. L'ordonnancement et
 l'envoi réel ne sont pas dans le périmètre : les trois canaux sont simulés par
 des mocks qui écrivent sur la console.
 
@@ -11,30 +12,124 @@ Le tableau des packages (licence, version, fraîcheur) est dans le
 ## Utilisation
 
 ```bash
-npm run wake -- u-001 LUNDI PLUIE
+npm run dev
 ```
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-001","day":"LUNDI","weather":"PLUIE"}'
+```
+
+```json
+{
+  "userId": "u-001",
+  "track": { "title": "I Don't Like Mondays", "artist": "The Boomtown Rats" },
+  "trackSource": "catalogue",
+  "channel": "email",
+  "degraded": false,
+  "incidents": []
+}
+```
+
+Le message envoyé par le mock du canal s'affiche dans la console du serveur.
+
+| Statut | Cas |
+|---|---|
+| `200` | Réveil envoyé, y compris en mode dégradé (`degraded: true`, détail dans `incidents`) |
+| `400` | Champ manquant, valeur inconnue ou JSON illisible |
+| `404` | Utilisateur inconnu |
+| `503` | Réveil impossible : l'appelant doit relancer et alerter |
+
+### Exemples de requêtes
+
+Une seule route, `POST /wakeup`, avec un corps JSON `userId`, `day`, `weather`.
+Résultats obtenus avec la configuration par défaut (iTunes en premier).
+
+**Morceau choisi pour la météo (u-001, canal email)**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-001","day":"MARDI","weather":"PLUIE"}'
+```
+
+`200` : « Riders on the Storm » de The Doors, envoyé par `email`.
+
+**Même utilisateur, même météo, autre jour : le morceau change**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-001","day":"DIMANCHE","weather":"PLUIE"}'
+```
+
+`200` : « Sunday Morning » de Maroon 5, envoyé par `email`.
+
+**Utilisateur qui préfère le SMS (u-002)**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-002","day":"VENDREDI","weather":"SOLEIL"}'
+```
+
+`200` : « Friday I'm In Love » de The Cure, envoyé par `sms`.
+
+**Utilisateur qui préfère le push (u-003)**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-003","day":"JEUDI","weather":"NEIGE"}'
+```
+
+`200` : « Snow (Hey Oh) » de Red Hot Chili Peppers, envoyé par `push`.
+
+**Météo non couverte par l'utilisateur : son morceau de secours**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-003","day":"JEUDI","weather":"NUAGEUX"}'
+```
+
+`200` : « Lovely Day » de Bill Withers, envoyé par `push`.
+
+**Jour inconnu**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-001","day":"MONDAY","weather":"PLUIE"}'
+```
+
+`400` : `valeur "MONDAY" inconnue pour "day" (attendu : LUNDI | MARDI | …)`.
+
+**Champ manquant**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-001","day":"MARDI"}'
+```
+
+`400` : `le champ "weather" est obligatoire (texte non vide)`.
+
+**Utilisateur inconnu**
+
+```bash
+curl -X POST http://localhost:3000/wakeup -H "Content-Type: application/json" -d '{"userId":"u-999","day":"LUNDI","weather":"PLUIE"}'
+```
+
+`404` : `Utilisateur inconnu : "u-999"`.
 
 - Utilisateurs de démonstration : `u-001` (email), `u-002` (SMS), `u-003` (push),
   définis dans [`InMemoryUserPreferencesService`](src/infrastructure/preferences/InMemoryUserPreferencesService.ts).
 - Jour : `LUNDI` … `DIMANCHE`. Météo : `SOLEIL | PLUIE | NEIGE | NUAGEUX`.
-- Code de sortie `0` si le réveil est parti (même en mode dégradé), `1` sinon.
+- En production : `npm run build` puis `npm start`.
 
-Démonstration des modes dégradés, sans toucher au code :
+Démonstration des modes dégradés, sans toucher au code : relancer le serveur
+avec une panne simulée, puis refaire la même requête.
 
 ```bash
-SIMULATED_OUTAGES=sms npm run wake -- u-002 MARDI PLUIE
+SIMULATED_OUTAGES=email npm run dev
 ```
 
 ```bash
-MUSIC_PROVIDERS= npm run wake -- u-002 MARDI NEIGE
+MUSIC_PROVIDERS= npm run dev
 ```
 
 ```bash
-SIMULATED_OUTAGES=preferences npm run wake -- u-001 MARDI PLUIE
+SIMULATED_OUTAGES=preferences npm run dev
 ```
 
 ```bash
-MUSIC_PROVIDERS=musicbrainz,itunes npm run wake -- u-003 DIMANCHE NEIGE
+MUSIC_PROVIDERS=musicbrainz,itunes npm run dev
 ```
 
 ## Les quatre exigences et leur traduction technique
@@ -68,7 +163,9 @@ src/
   config/            env.ts : seul lecteur de process.env. providers.ts : registres nom -> classe
   di/                Jetons d'injection (métier d'un côté, infrastructure de l'autre)
   container.ts       Composition root : le seul endroit qui associe abstraction et implémentation
-  cli/ main.ts       Point d'entrée en ligne de commande
+  controllers/       Validation de la requête, appel du métier, erreurs -> statuts HTTP
+  app.ts             Routes Express, à partir d'un WakeUpService déjà construit
+  server.ts          Point d'entrée : configuration, conteneur, écoute du port
 ```
 
 ### Isolation et faible couplage
@@ -161,18 +258,18 @@ Le résultat de l'appel indique toujours ce qui s'est passé (`trackSource`,
 `channel`, `degraded`, `incidents`), et chaque incident est journalisé.
 
 **Ce qui reste impossible.** Deux situations ne peuvent pas être résolues par
-le code, et se terminent par un code de sortie 1 avec le détail de chaque
-tentative, pour que l'ordonnanceur relance et alerte :
+le code, et se terminent par une réponse `503`, pour que l'ordonnanceur
+relance et alerte :
 
 - tous les canaux de l'utilisateur sont encore en panne après le dernier tour
   d'essai ;
 - le service de préférences est en panne pour un utilisateur qui n'a jamais été
   réveillé (aucune préférence connue, donc ni canal ni adresse).
 
-Le cache des morceaux et les quotas sont en mémoire : ils ne valent que pour un
-processus qui reste en vie entre deux réveils. Les dernières préférences
-connues, elles, sont dans un fichier (`PREFERENCES_CACHE_FILE`) et survivent
-d'un lancement à l'autre ; ce fichier contient les adresses des utilisateurs et
+Le cache des morceaux et les quotas sont en mémoire : ils vivent aussi
+longtemps que le serveur, et repartent de zéro à chaque redémarrage. Les
+dernières préférences connues, elles, sont dans un fichier
+(`PREFERENCES_CACHE_FILE`) et survivent à un redémarrage ; ce fichier contient les adresses des utilisateurs et
 n'est pas versionné.
 
 ## Choix d'interprétation
@@ -186,19 +283,21 @@ n'est pas versionné.
 - **Morceau de secours de l'utilisateur** : utilisé pour les cas (jour, météo) qu'il
   n'a pas couverts. À ne pas confondre avec le **secours local**, utilisé quand
   aucun fournisseur ne répond.
-- **Point d'entrée en ligne de commande** plutôt qu'une API HTTP : l'appel est
-  déclenché par un ordonnanceur, et cela évite d'ajouter un framework web aux
-  dépendances de production.
+- **Point d'entrée HTTP.** L'énoncé parle d'un « appel » sans en fixer la
+  forme. Une API est ce qu'un ordonnanceur appelle en production, et un serveur
+  qui reste en vie rend le cache et les quotas réellement utiles. Le prix est
+  une dépendance de production de plus (Express), justifiée dans le README.
 
 ## Configuration
 
 Toutes les variables sont lues à un seul endroit,
 [`src/config/env.ts`](src/config/env.ts), avec leurs valeurs par défaut.
-`npm run wake` et `npm start` chargent `.env` s'il existe (flag natif de Node,
+`npm run dev` et `npm start` chargent `.env` s'il existe (flag natif de Node,
 pas de dépendance `dotenv`) ; [`.env.example`](.env.example) sert de modèle.
 
 | Variable | Défaut | Rôle |
 |---|---|---|
+| `PORT` | `3000` | Port d'écoute de l'API |
 | `MUSIC_PROVIDERS` | `itunes,musicbrainz` | Fournisseurs actifs, par ordre de priorité. Vide = secours local seul |
 | `NOTIFICATION_CHANNELS` | `email,sms,push` | Canaux installés |
 | `NOTIFICATION_ROUNDS` | `3` | Nombre de tours d'essai sur les canaux de l'utilisateur |
@@ -223,9 +322,9 @@ npm test
 npm run test:coverage
 ```
 
-209 tests, aucun n'utilise le réseau. Couverture de `src/` : **100 %** des
+229 tests, aucun n'utilise le réseau. Couverture de `src/` : **100 %** des
 instructions, branches, fonctions et lignes (seuil de 90 % imposé par
-`vitest.config.ts` ; `main.ts` et les interfaces sont exclus du calcul).
+`vitest.config.ts` ; `server.ts` et les interfaces sont exclus du calcul).
 
 - **Unitaires** (`tests/unit`) : chaque classe isolée, ses dépendances
   remplacées par des fakes (`tests/fakes`). Le temps est piloté par une fausse
@@ -235,8 +334,10 @@ instructions, branches, fonctions et lignes (seuil de 90 % imposé par
   fournisseur, introuvable, panne, format inattendu, caractères accentués.
   `NotificationChannel` : envoi réussi, panne, panne d'un autre canal.
 - **Bout en bout** (`tests/e2e`) : le vrai conteneur est construit par
-  `buildContainer`, seules les frontières externes (HTTP, sortie des mocks) sont
-  remplacées. Couvre le cas nominal et chaque mode dégradé.
+  `buildContainer`, seules les frontières externes (HTTP sortant, sortie des
+  mocks) sont remplacées. `api.e2e.test.ts` envoie de vraies requêtes à
+  l'application Express (supertest) : cas nominal, modes dégradés et chaque
+  statut d'erreur.
 - **Architecture** (`tests/architecture`) : les règles listées plus haut.
 
 Vérifié aussi à la main contre les vraies API iTunes et MusicBrainz le
@@ -259,7 +360,7 @@ autorisée ne peut pas être intégrée sans décision explicite.
 | MusicBrainz (MetaBrainz Foundation, États-Unis) | API tierce, sans clé | `User-Agent` identifiable obligatoire, 1 requête/seconde en moyenne ; données de base sous CC0 | Idem ; quota de 50 requêtes/minute dans le registre |
 | SDK email / SMS / push | Mocks écrits pour le TP | — | Un vrai SDK devra passer l'audit de licence avant intégration ; seul son adaptateur le connaîtra |
 | Service interne de préférences | Mock | — | Isolé derrière `UserPreferencesService` |
-| Node.js | Environnement d'exécution | ≥ 22 (`fetch`, `AbortSignal.timeout`, `--env-file-if-exists` natifs) | Aucune librairie HTTP ni `dotenv` à maintenir |
+| Node.js | Environnement d'exécution | ≥ 22 (`fetch`, `AbortSignal.timeout`, `--env-file-if-exists` natifs) | Aucune librairie de client HTTP ni `dotenv` à maintenir |
 
 Seul le titre du morceau recherché est envoyé aux deux API, plus l'adresse de
 contact du `User-Agent` : aucune donnée d'utilisateur ne quitte le système.

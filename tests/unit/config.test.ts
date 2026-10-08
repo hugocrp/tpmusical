@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseWakeUpRequest } from "../../src/cli/parseWakeUpRequest.js";
+import { parseWakeUpRequest } from "../../src/controllers/wakeUpRequest.js";
 import { ENV_DEFAULTS, loadEnvConfig } from "../../src/config/env.js";
 import {
   MUSIC_PROVIDER_REGISTRY,
@@ -12,6 +12,7 @@ import { InvalidWakeUpRequestError } from "../../src/domain/errors.js";
 describe("loadEnvConfig", () => {
   it("applique les valeurs par défaut quand rien n'est défini", () => {
     expect(loadEnvConfig({})).toEqual({
+      port: 3000,
       httpUserAgent: ENV_DEFAULTS.HTTP_USER_AGENT,
       httpTimeoutMs: 3000,
       musicProviders: ["itunes", "musicbrainz"],
@@ -27,6 +28,7 @@ describe("loadEnvConfig", () => {
 
   it("lit les variables d'environnement, listes nettoyées et normalisées", () => {
     const config = loadEnvConfig({
+      PORT: "8080",
       HTTP_USER_AGENT: "MonApp/2.0 (moi@example.org)",
       HTTP_TIMEOUT_MS: "500",
       MUSIC_PROVIDERS: " MusicBrainz , itunes,",
@@ -40,6 +42,7 @@ describe("loadEnvConfig", () => {
     });
 
     expect(config).toEqual({
+      port: 8080,
       httpUserAgent: "MonApp/2.0 (moi@example.org)",
       httpTimeoutMs: 500,
       musicProviders: ["musicbrainz", "itunes"],
@@ -59,6 +62,10 @@ describe("loadEnvConfig", () => {
 
   it.each(["abc", "0", "-5", "1.5", ""])("rejette un délai HTTP invalide (%j)", (value) => {
     expect(() => loadEnvConfig({ HTTP_TIMEOUT_MS: value })).toThrow("HTTP_TIMEOUT_MS");
+  });
+
+  it("rejette un port invalide", () => {
+    expect(() => loadEnvConfig({ PORT: "http" })).toThrow("PORT");
   });
 
   it("rejette un nombre de tours ou une pause invalide", () => {
@@ -118,24 +125,34 @@ describe("registres de fournisseurs et de canaux", () => {
 
 describe("parseWakeUpRequest", () => {
   it("lit l'identifiant, le jour et la météo, sans tenir compte de la casse", () => {
-    expect(parseWakeUpRequest([" u-001 ", "lundi", "Pluie"])).toEqual({ userId: "u-001", day: "LUNDI", weather: "PLUIE" });
+    expect(parseWakeUpRequest({ userId: " u-001 ", day: "lundi", weather: "Pluie" })).toEqual({
+      userId: "u-001",
+      day: "LUNDI",
+      weather: "PLUIE",
+    });
+  });
+
+  it.each([[undefined], [null], ["texte"], [42], [[]]])("rejette un corps qui n'est pas un objet (%j)", (body) => {
+    expect(() => parseWakeUpRequest(body)).toThrow(InvalidWakeUpRequestError);
   });
 
   it.each([
-    [[]],
-    [["u-001"]],
-    [["u-001", "LUNDI"]],
-    [["u-001", "LUNDI", "PLUIE", "en trop"]],
-    [["  ", "LUNDI", "PLUIE"]],
-  ])("rejette un nombre d'arguments incorrect ou un identifiant vide (%j)", (args) => {
-    expect(() => parseWakeUpRequest(args)).toThrow(InvalidWakeUpRequestError);
+    [{ day: "LUNDI", weather: "PLUIE" }, "userId"],
+    [{ userId: "  ", day: "LUNDI", weather: "PLUIE" }, "userId"],
+    [{ userId: 42, day: "LUNDI", weather: "PLUIE" }, "userId"],
+    [{ userId: "u-001", weather: "PLUIE" }, "day"],
+    [{ userId: "u-001", day: "LUNDI" }, "weather"],
+  ])("rejette un champ manquant, vide ou mal typé (%j)", (body, field) => {
+    expect(() => parseWakeUpRequest(body)).toThrow(`le champ "${field}" est obligatoire`);
   });
 
-  it("rejette un jour inconnu", () => {
-    expect(() => parseWakeUpRequest(["u-001", "MONDAY", "PLUIE"])).toThrow('valeur "MONDAY" inconnue pour le jour');
+  it("rejette un jour inconnu en listant les valeurs attendues", () => {
+    expect(() => parseWakeUpRequest({ userId: "u-001", day: "MONDAY", weather: "PLUIE" })).toThrow(
+      'valeur "MONDAY" inconnue pour "day" (attendu : LUNDI | MARDI',
+    );
   });
 
   it("rejette une météo inconnue", () => {
-    expect(() => parseWakeUpRequest(["u-001", "LUNDI", "GRELE"])).toThrow('valeur "GRELE" inconnue pour la météo');
+    expect(() => parseWakeUpRequest({ userId: "u-001", day: "LUNDI", weather: "GRELE" })).toThrow('inconnue pour "weather"');
   });
 });

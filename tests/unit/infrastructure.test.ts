@@ -113,15 +113,12 @@ describe("Adaptateurs système", () => {
     expect(now).toBeLessThanOrEqual(Date.now());
   });
 
-  it("ConsoleLogger écrit les informations et les alertes sur la console", () => {
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  it("ConsoleLogger écrit les alertes sur la console", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const logger = new ConsoleLogger();
 
-    logger.info("tout va bien");
     logger.warn("attention");
 
-    expect(log).toHaveBeenCalledWith("[info] tout va bien");
     expect(warn).toHaveBeenCalledWith("[alerte] attention");
   });
 
